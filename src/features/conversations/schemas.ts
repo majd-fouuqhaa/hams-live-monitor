@@ -1,6 +1,6 @@
 // Runtime validation for everything that crosses the network boundary.
 import { z } from "zod";
-import type { Conversation, ServerEvent, Snapshot } from "./types";
+import type { Conversation, Message, ServerEvent, Snapshot, ThreadSnapshot } from "./types";
 
 const StatusSchema = z.enum(["ai", "needs_human", "human", "closed"]);
 
@@ -24,7 +24,17 @@ const MessageSchema = z.object({
   role: z.enum(["customer", "ai", "human"]),
   text: z.string(),
   createdAt: z.string(),
-});
+  streaming: z.literal(true).optional(),
+  clientMessageId: z.string().optional(),
+}) satisfies z.ZodType<Message>;
+
+export const ThreadSnapshotSchema = z.object({
+  lastEventId: z.number().int(),
+  messages: z.array(MessageSchema),
+}) satisfies z.ZodType<ThreadSnapshot>;
+
+/** The body of a REST error response. */
+export const ErrorBodySchema = z.object({ error: z.string() });
 
 const base = { id: z.number().int(), conversationId: z.string() };
 

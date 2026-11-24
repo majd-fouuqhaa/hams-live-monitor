@@ -1,5 +1,6 @@
-// The live event stream: one native EventSource for every conversation. See docs/adr/0002.
-import { MAX_STREAM_FAILURES } from "./constants";
+// The live event stream: one EventSource for every conversation, reopened by us after each drop so it
+// always resumes from the last event we applied. See docs/adr/0002.
+import { MAX_STREAM_FAILURES, STREAM_RETRY_MS } from "./constants";
 import { ServerEventSchema } from "./schemas";
 import type { ConnectEventsOptions, ConnectionState, EventsConnection, ServerEvent } from "./types";
 
@@ -20,52 +21,64 @@ function parseEvent(data: string): ServerEvent | null {
 
 export function connectEvents({
   baseUrl,
+  since,
   onEvent,
   onState,
   maxFailures = MAX_STREAM_FAILURES,
+  retryMs = STREAM_RETRY_MS,
 }: ConnectEventsOptions): EventsConnection {
   let state: ConnectionState | undefined;
   const report = (next: ConnectionState) => {
     if (next !== state) onState((state = next));
   };
 
-  let source: EventSource;
+  let source: EventSource | undefined;
+  let retry: ReturnType<typeof setTimeout> | undefined;
   let failures = 0;
 
-  function open(url: string) {
-    report("connecting");
-    failures = 0;
-    source = new EventSource(url);
-    source.onopen = () => {
+  // Every connection asks for the events after the last one we applied. The browser's own reconnect
+  // would reuse this URL, and the server prefers `since` over Last-Event-ID, so it would replay from
+  // an old id on every drop. We close on error and reopen with the current id instead.
+  function open() {
+    const current = new EventSource(`${baseUrl}/events?since=${since()}`);
+    source = current;
+    current.onopen = () => {
       failures = 0;
       report("live");
     };
-
-    // The browser retries on its own after `retry` ms. We count failures in a row and give up after
-    // `maxFailures`, or at once when the browser itself gives up (e.g. an HTTP error status).
-    source.onerror = () => {
+    current.onerror = () => {
+      // CLOSED here means the browser gave up by itself (e.g. an HTTP error status): don't retry.
+      const refused = current.readyState === EventSource.CLOSED;
+      current.close();
       failures += 1;
-      if (source.readyState === EventSource.CLOSED || failures >= maxFailures) {
-        source.close();
+      if (refused || failures >= maxFailures) {
         report("disconnected");
-      } else {
-        report("reconnecting");
+        return;
       }
+      report("reconnecting");
+      retry = setTimeout(open, retryMs);
     };
-    source.onmessage = (e: MessageEvent<string>) => {
+    current.onmessage = (e: MessageEvent<string>) => {
       const event = parseEvent(e.data);
       if (event) onEvent(event);
     };
   }
 
-  // No `since` here: native reconnects reuse this URL and send Last-Event-ID instead (ADR 0002).
-  open(`${baseUrl}/events`);
+  function stop() {
+    clearTimeout(retry);
+    source?.close();
+  }
+
+  report("connecting");
+  open();
 
   return {
-    reconnect(since) {
-      source.close();
-      open(`${baseUrl}/events?since=${since}`);
+    reconnect() {
+      stop();
+      failures = 0;
+      report("connecting");
+      open();
     },
-    close: () => source.close(),
+    close: stop,
   };
 }

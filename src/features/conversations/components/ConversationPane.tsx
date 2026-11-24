@@ -1,7 +1,12 @@
 import { getRouteApi } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import { useConversations, useConversationsActions } from "../context";
-import { STATUS_LABEL } from "../constants";
+import { useThreadSnapshot } from "../hooks/useThreadSnapshot";
+import { StatusBadge } from "./StatusBadge";
+import { ThreadFooter } from "./ThreadFooter";
+import { ThreadMessages } from "./ThreadMessages";
+import { ThreadSkeleton } from "./ThreadSkeleton";
 
 const route = getRouteApi("/conversations/$conversationId");
 
@@ -9,7 +14,8 @@ export function ConversationPane() {
   const { conversationId } = route.useParams();
   const { open } = useConversationsActions();
   const loaded = useConversations((s) => s.list !== null);
-  const row = useConversations((s) => s.list?.byId[conversationId]);
+  const customer = useConversations((s) => s.list?.byId[conversationId]?.customer);
+  const status = useConversations((s) => s.list?.byId[conversationId]?.status);
 
   useEffect(() => {
     open(conversationId);
@@ -17,15 +23,69 @@ export function ConversationPane() {
   }, [open, conversationId]);
 
   if (!loaded) return null;
-  if (!row) return <ConversationNotFound />;
+  if (customer === undefined || !status) return <ConversationNotFound />;
+
+  // The header comes from the list row, so it shows at once while the messages load.
+  return (
+    <section aria-labelledby="conversation-title" className="flex min-h-0 flex-1 flex-col">
+      <header className="flex items-center gap-2 border-b px-4 py-3">
+        <h2 id="conversation-title" className="min-w-0 truncate text-start text-base font-semibold">
+          <bdi>{customer}</bdi>
+        </h2>
+        <StatusBadge status={status} />
+      </header>
+      <ThreadBody key={conversationId} conversationId={conversationId} />
+      <ThreadFooter
+        key={`footer-${conversationId}`}
+        conversationId={conversationId}
+        status={status}
+      />
+    </section>
+  );
+}
+
+interface ThreadBodyProps {
+  conversationId: string;
+}
+
+function ThreadBody({ conversationId }: ThreadBodyProps) {
+  const snapshot = useThreadSnapshot(conversationId);
+  const threadLoaded = useConversations((s) => s.threads[conversationId]?.loaded ?? false);
+  const outOfSync = useConversations((s) => s.threads[conversationId]?.outOfSync ?? false);
+  const retry = () => void snapshot.refetch();
+
+  if (!threadLoaded) {
+    if (snapshot.isError) {
+      return (
+        <div role="alert" className="grid flex-1 place-items-center p-6">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <p className="text-sm">Couldn't load messages</p>
+            <p className="text-xs text-muted-foreground">{snapshot.error.message}</p>
+            <Button size="sm" onClick={retry}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    return <ThreadSkeleton />;
+  }
 
   return (
-    <section aria-labelledby="conversation-title" className="flex flex-col gap-1 p-6">
-      <h2 id="conversation-title" className="text-start text-lg font-semibold">
-        <bdi>{row.customer}</bdi>
-      </h2>
-      <p className="text-sm text-muted-foreground">{STATUS_LABEL[row.status]}</p>
-    </section>
+    <>
+      {outOfSync && (
+        <div
+          role="alert"
+          className="flex items-center gap-3 border-b bg-muted/50 px-4 py-2 text-sm"
+        >
+          <p className="flex-1 text-start">This conversation may be out of date.</p>
+          <Button size="sm" variant="outline" onClick={retry} disabled={snapshot.isFetching}>
+            {snapshot.isFetching ? "Refreshing…" : "Retry"}
+          </Button>
+        </div>
+      )}
+      <ThreadMessages conversationId={conversationId} />
+    </>
   );
 }
 

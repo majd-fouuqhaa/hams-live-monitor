@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import type {
+  Api,
   Conversations,
   ConversationsActions,
   ConversationsState,
@@ -29,4 +30,9 @@ export function useConversationsActions(): ConversationsActions {
 /** Subscribes to a slice of the conversations data. Keep selectors narrow: see ADR 0001. */
 export function useConversations<T>(selector: (state: ConversationsState) => T): T {
   return useStore(useConversationsStore(), selector);
+}
+
+/** The REST client, for hooks that track a request in react-query. */
+export function useConversationsApi(): Api {
+  return useConversationsContext().api;
 }
