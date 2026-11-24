@@ -27,7 +27,6 @@ export function useConversationsActions(): ConversationsActions {
   return useConversationsContext().actions;
 }
 
-/** Subscribes to a slice of the conversations data. Keep selectors narrow: see ADR 0001. */
 export function useConversations<T>(selector: (state: ConversationsState) => T): T {
   return useStore(useConversationsStore(), selector);
 }

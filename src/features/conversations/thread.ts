@@ -1,5 +1,3 @@
-// The thread reducer: one conversation's messages, kept live from its snapshot onward (ADR 0007).
-// Pure: no React, no network. The list reducer (model.ts) runs beside it on every event.
 import { produce } from "immer";
 import type {
   Handoff,

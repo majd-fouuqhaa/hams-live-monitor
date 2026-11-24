@@ -58,13 +58,13 @@ export interface ListState {
   lastEventId: number;
   /** Text of AI replies still streaming, by message id. Kept off the rows so tokens never re-render the list. */
   drafts: Record<string, string>;
-  /** The server's ever-increasing unread counter, mirrored (ADR 0004). */
+  /** The server's ever-increasing unread counter */
   serverUnread: Record<string, number>;
   /** serverUnread at the moment each conversation was last read. */
   baselines: Record<string, number>;
   /** The conversation on screen; its baseline follows every new message. */
   openId: string | null;
-  /** Hand-offs seen in the stream, oldest first. The server never stores them (ADR 0007). */
+  /** Hand-offs seen in the stream, oldest first. The server never stores them */
   handoffs: Record<string, Handoff[]>;
   /** The event that created each message we saw created; places hand-offs by event id. */
   createdBy: Record<string, number>;
@@ -88,7 +88,7 @@ export interface PendingReply {
   state: "sending" | "sent";
 }
 
-/** One opened conversation's messages, kept live (ADR 0007). */
+/** One opened conversation's messages, kept live */
 export interface ThreadState {
   conversationId: string;
   /** false until the first snapshot arrives. */
@@ -103,14 +103,14 @@ export interface ThreadState {
   buffer: ServerEvent[] | null;
   /**
    * A snapshot ahead of the list, held until the stream catches up to it. Only then does the list know
-   * every hand-off and message-creating event it includes, which places hand-offs correctly (ADR 0007).
+   * every hand-off and message-creating event it includes, which places hand-offs correctly
    */
   waiting: ThreadSnapshot | null;
   /** The thread got an event it cannot apply; its contents may be wrong until refetched. */
   outOfSync: boolean;
 }
 
-/** Read state kept in localStorage between sessions (ADR 0004). */
+/** Read state kept in localStorage between sessions */
 export interface PersistedReadState {
   baselines: Record<string, number>;
   lastEventId: number;

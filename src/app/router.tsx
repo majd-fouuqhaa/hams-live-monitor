@@ -1,5 +1,3 @@
-// Code-based routes (ADR 0005): a root layout with the list, an index and one conversation route.
-// No loaders: the snapshot is fetched by useConversationsSnapshot inside the Shell.
 import {
   createRootRoute,
   createRoute,

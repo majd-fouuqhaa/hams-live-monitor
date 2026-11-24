@@ -74,7 +74,6 @@ export function applyEvent(
     draft.lastEventId = event.id;
     const conversation = draft.byId[event.conversationId];
     if (!conversation) {
-      // The mock never creates conversations; a real backend would need a creation event (ADR 0001).
       if (import.meta.env.DEV) console.warn(`Event ${event.id} for unknown conversation`, event);
       return;
     }
@@ -98,7 +97,7 @@ export function applyEvent(
           draft.serverUnread[id] = (draft.serverUnread[id] ?? 0) + 1;
           syncUnread(draft, id);
         }
-        // Events carry no timestamp; receive time is close enough (ADR 0006).
+
         conversation.updatedAt = now.toISOString();
         break;
       }
@@ -109,8 +108,6 @@ export function applyEvent(
         break;
       }
       case "token": {
-        // Only a reply whose start we saw has a draft. One that began before the page loaded still proves
-        // the AI is replying, but its tail alone must never become the preview (ADR 0007).
         if (event.messageId in draft.drafts) draft.drafts[event.messageId] += event.text;
         else conversation.typing = true;
         break;

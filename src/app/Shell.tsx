@@ -30,7 +30,6 @@ interface FrameProps {
 }
 
 function Frame({ list, status, banner, children }: FrameProps) {
-  // The list sits on the inline-start side: left in LTR, right in RTL (ADR 0005).
   const side = useDirection() === "rtl" ? "right" : "left";
   return (
     <SidebarProvider style={{ "--sidebar-width": "22rem" } as React.CSSProperties}>

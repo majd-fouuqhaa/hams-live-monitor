@@ -5,8 +5,6 @@ import { SidebarGroup, SidebarMenu, SidebarMenuItem } from "@/components/ui/side
 /** Fixed (not random) name widths, so the placeholder looks the same on every render. */
 const NAME_WIDTHS = ["w-28", "w-36", "w-24", "w-32", "w-28", "w-20"];
 
-/** Shown while the conversations load. Each placeholder mirrors a real row's layout and height (ADR 0006),
- *  so nothing shifts when the list arrives. */
 export function ConversationListSkeleton() {
   return (
     <div role="status" aria-label="Loading conversations">

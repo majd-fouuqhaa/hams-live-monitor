@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useConversationsActions, useConversationsApi } from "../context";
 
-/** Loads GET /conversations (ADR 0001). The query only tracks the request: loading, error, retry. */
 export function useConversationsSnapshot() {
   const { receiveSnapshot } = useConversationsActions();
   const api = useConversationsApi();

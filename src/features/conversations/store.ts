@@ -117,7 +117,6 @@ export function createConversations({
     set({ list, threads });
   }
 
-  /** Both reducers, one commit: the list and the thread never disagree on screen (ADR 0007). */
   function applyLive(event: ServerEvent) {
     const { list, threads } = get();
     if (!list) return;
@@ -159,7 +158,6 @@ export function createConversations({
       if (get().list) return;
       set({ list: loadSnapshot(snapshot, readSaved(storage)) });
 
-      // Opened only now, from the snapshot's event id: nothing can fall between the two (ADR 0002).
       connection ??= connect({
         since: () => get().list?.lastEventId ?? snapshot.lastEventId,
         onEvent: applyLive,

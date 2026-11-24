@@ -1,10 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useConversationsActions, useConversationsApi } from "../context";
 
-/**
- * Loads a thread once; the stream keeps it live after that (ADR 0007). The query tracks only the request
- * (loading, error, Retry, cancel) and keeps just the snapshot's event id: the messages live in the store.
- */
 export function useThreadSnapshot(conversationId: string) {
   const { beginThreadFetch, receiveThread, failThreadFetch } = useConversationsActions();
   const api = useConversationsApi();

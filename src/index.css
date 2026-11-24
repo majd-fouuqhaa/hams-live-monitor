@@ -6,7 +6,6 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* A live hand-off fades in from amber (ADR 0006). Gated with motion-safe: where used. */
   --animate-arrive: arrive 1.5s ease-out;
   @keyframes arrive {
     from {

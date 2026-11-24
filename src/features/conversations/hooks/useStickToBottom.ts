@@ -13,10 +13,6 @@ interface StickToBottomOptions {
   pendingCount: number;
 }
 
-/**
- * Chat scrolling for the virtualized thread (ADR 0007): opens at the newest message, follows new content
- * while the user is near the bottom, and otherwise offers a "New messages" jump instead of moving them.
- */
 export function useStickToBottom({
   scrollRef,
   virtualizer,
