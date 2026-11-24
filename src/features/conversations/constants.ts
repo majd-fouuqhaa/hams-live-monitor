@@ -21,6 +21,9 @@ export const STREAM_RETRY_MS = 3000;
 
 export const READ_STATE_KEY = "hams.readState";
 
+/** Refreshes of GET /conversations for one missed-start preview before giving up on it. */
+export const PREVIEW_REFRESH_MAX_ATTEMPTS = 3;
+
 export const UNREAD_DISPLAY_MAX = 99;
 
 export const HANDOFF_FLASH_WINDOW_MS = 2000;

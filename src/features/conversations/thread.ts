@@ -29,6 +29,7 @@ export function emptyThread(conversationId: string): ThreadState {
     byId: {},
     pending: [],
     buffer: [],
+    waiting: null,
     outOfSync: false,
   };
 }
@@ -80,6 +81,7 @@ export function loadThread(
     byId,
     pending,
     buffer: null,
+    waiting: null,
     outOfSync: false,
   };
   return (thread.buffer ?? []).reduce((t, e) => applyThreadEvent(t, e, now), loaded);
@@ -88,7 +90,7 @@ export function loadThread(
 /** The fetch failed: a loaded thread applies what it held and stays live; a new one has nothing to keep. */
 export function abandonFetch(thread: ThreadState, now: Date): ThreadState | undefined {
   if (!thread.loaded) return undefined;
-  const live: ThreadState = { ...thread, buffer: null };
+  const live: ThreadState = { ...thread, buffer: null, waiting: null };
   return (thread.buffer ?? []).reduce((t, e) => applyThreadEvent(t, e, now), live);
 }
 

@@ -77,8 +77,6 @@ The connection state (Connecting, Live, Reconnecting, Disconnected) shows in the
 
 ## Skipped
 
-- **Tests for the thread.** The list, the stream client and the reconnect have tests; the thread (token
-  order, duplicates after a resume inside a thread, the hand-off entry, send rollback) does not yet.
 - **Localization.** The interface text is English only. The RTL / LTR toggle changes the layout, not the
   language. Times use the browser's locale.
 - Keyboard shortcuts to move between conversations.
@@ -87,7 +85,6 @@ The connection state (Connecting, Live, Reconnecting, Disconnected) shows in the
 
 ## With more time
 
-- Tests for the thread, as above.
 - Arabic interface text, with the language and the layout direction switched together.
 - Retry a failed send safely. The API has no idempotency key, so retrying after a network error (where the
   server may have saved the message) can send it twice.

@@ -17,7 +17,8 @@ export const PendingBubble = memo(function PendingBubble({
   if (!reply) return null;
   return (
     <Bubble role="human" text={reply.text} className="opacity-70">
-      <span className="mt-1 text-xs">Sending…</span>
+      {/* Sent: the server accepted it; its echo on the stream will place it among the messages. */}
+      <span className="mt-1 text-xs">{reply.state === "sent" ? "Sent" : "Sending…"}</span>
     </Bubble>
   );
 });

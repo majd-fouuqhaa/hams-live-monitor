@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createStore } from "zustand/vanilla";
-import { READ_STATE_KEY } from "./constants";
+import { PREVIEW_REFRESH_MAX_ATTEMPTS, READ_STATE_KEY } from "./constants";
 import {
   applyEvent,
   applyPreviewRefresh,
@@ -27,7 +27,9 @@ import type {
   ConversationsStoreDeps,
   EventsConnection,
   PersistedReadState,
+  ListState,
   ServerEvent,
+  ThreadSnapshot,
   ThreadState,
 } from "./types";
 
@@ -69,7 +71,7 @@ export function createConversations({
     set(({ threads }) => ({ threads: { ...threads, [thread.conversationId]: thread } }));
 
   /** Rows whose reply ended without a known text get their preview from a fresh GET /conversations. */
-  async function refreshStalePreviews() {
+  async function refreshStalePreviews(attempt = 1) {
     if (refreshingPreviews) return;
     refreshingPreviews = true;
     try {
@@ -82,8 +84,37 @@ export function createConversations({
     } finally {
       refreshingPreviews = false;
     }
-    // A reply that ended while the request was in flight is still waiting.
-    if (Object.keys(get().list?.stalePreviews ?? {}).length > 0) void refreshStalePreviews();
+    // A reply that ended while the request was in flight is still waiting. A server that never reaches
+    // it (e.g. restarted, its ids went back) would keep us asking: give up after a few tries.
+    const { list } = get();
+    if (!list || Object.keys(list.stalePreviews).length === 0) return;
+    if (attempt < PREVIEW_REFRESH_MAX_ATTEMPTS) void refreshStalePreviews(attempt + 1);
+    else set({ list: dropStalePreviews(list) });
+  }
+
+  /** Loads a thread's snapshot and replays what it held; the row's typing follows the thread. */
+  function loadInto(list: ListState, thread: ThreadState, snapshot: ThreadSnapshot) {
+    const loaded = loadThread(
+      thread,
+      snapshot,
+      list.handoffs[thread.conversationId] ?? [],
+      list.createdBy,
+      now(),
+    );
+    return { thread: loaded, list: syncTypingFromThread(list, loaded) };
+  }
+
+  /** The stream gave up, so the list cannot catch up: show held threads as they are (best effort). */
+  function loadHeldThreads() {
+    let { list, threads } = get();
+    if (!list) return;
+    for (const thread of Object.values(threads)) {
+      if (!thread.waiting) continue;
+      const loaded = loadInto(list, thread, thread.waiting);
+      list = loaded.list;
+      threads = { ...threads, [thread.conversationId]: loaded.thread };
+    }
+    set({ list, threads });
   }
 
   /** Both reducers, one commit: the list and the thread never disagree on screen (ADR 0007). */
@@ -91,10 +122,14 @@ export function createConversations({
     const { list, threads } = get();
     if (!list) return;
     const current = threads[event.conversationId];
-    const thread = current && applyThreadEvent(current, event, now());
+    let thread = current && applyThreadEvent(current, event, now());
     const threadText: ThreadText = (_, messageId) =>
       thread?.buffer === null ? thread.byId[messageId]?.text : undefined;
-    const nextList = applyEvent(list, event, now(), threadText);
+    let nextList = applyEvent(list, event, now(), threadText);
+    // A thread held because its snapshot was ahead loads once the list has caught up to it.
+    if (thread?.waiting && nextList.lastEventId >= thread.waiting.lastEventId) {
+      ({ thread, list: nextList } = loadInto(nextList, thread, thread.waiting));
+    }
     set({
       list: nextList,
       ...(thread && thread !== current
@@ -111,7 +146,11 @@ export function createConversations({
 
   store.subscribe(({ list }, previous) => {
     if (!list || list.baselines === previous.list?.baselines) return;
-    storage.setItem(READ_STATE_KEY, JSON.stringify(selectPersisted(list)));
+    try {
+      storage.setItem(READ_STATE_KEY, JSON.stringify(selectPersisted(list)));
+    } catch {
+      // Storage full or blocked: read state just won't survive a reload.
+    }
   });
 
   const actions: ConversationsActions = {
@@ -124,7 +163,10 @@ export function createConversations({
       connection ??= connect({
         since: () => get().list?.lastEventId ?? snapshot.lastEventId,
         onEvent: applyLive,
-        onState: (state) => set({ connection: state }),
+        onState(state) {
+          set({ connection: state });
+          if (state === "disconnected") loadHeldThreads();
+        },
       });
     },
 
@@ -149,18 +191,15 @@ export function createConversations({
       const { list, threads } = get();
       const thread = threads[conversationId];
       // Not fetching any more (e.g. a fetch that was already settled): the live thread stays as it is.
-      if (!thread?.buffer) return;
-      const loaded = loadThread(
-        thread,
-        snapshot,
-        list?.handoffs[conversationId] ?? [],
-        list?.createdBy ?? {},
-        now(),
-      );
-      set({
-        threads: { ...threads, [conversationId]: loaded },
-        ...(list ? { list: syncTypingFromThread(list, loaded) } : {}),
-      });
+      if (!list || !thread?.buffer) return;
+      // Ahead of the list (e.g. while the stream reconnects): hold it until the list catches up, so the
+      // list knows every hand-off and message the snapshot includes. Disconnected, it never would.
+      if (snapshot.lastEventId > list.lastEventId && get().connection !== "disconnected") {
+        setThread({ ...thread, waiting: snapshot });
+        return;
+      }
+      const loaded = loadInto(list, thread, snapshot);
+      set({ threads: { ...threads, [conversationId]: loaded.thread }, list: loaded.list });
     },
 
     failThreadFetch(conversationId, fetchId) {

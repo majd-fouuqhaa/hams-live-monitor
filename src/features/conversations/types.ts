@@ -101,6 +101,11 @@ export interface ThreadState {
   pending: PendingReply[];
   /** Events held while a fetch is in flight; null when none is. */
   buffer: ServerEvent[] | null;
+  /**
+   * A snapshot ahead of the list, held until the stream catches up to it. Only then does the list know
+   * every hand-off and message-creating event it includes, which places hand-offs correctly (ADR 0007).
+   */
+  waiting: ThreadSnapshot | null;
   /** The thread got an event it cannot apply; its contents may be wrong until refetched. */
   outOfSync: boolean;
 }
