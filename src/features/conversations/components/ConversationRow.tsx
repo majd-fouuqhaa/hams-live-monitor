@@ -4,30 +4,12 @@ import { memo } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { formatLong, formatShort, useNow } from "@/utils/relative-time";
-import { STATUS_LABEL, UNREAD_DISPLAY_MAX } from "../constants";
+import { UNREAD_DISPLAY_MAX } from "../constants";
 import type { RowView } from "../types";
 import { ArrivalFlash } from "./ArrivalFlash";
 import { StatusBadge } from "./StatusBadge";
 import { TypingDots } from "./TypingDots";
-
-function initials(name: string) {
-  const words = name.trim().split(/\s+/);
-  const first = words[0]?.[0] ?? "";
-  const last = words.length > 1 ? (words.at(-1)?.[0] ?? "") : "";
-  return (first + last).toUpperCase();
-}
-
-function accessibleName(row: RowView, when: string) {
-  return [
-    row.customer,
-    STATUS_LABEL[row.status],
-    row.unread > 0 ? `${row.unread} unread` : null,
-    row.typing ? "AI is replying" : null,
-    `${when}: ${row.lastMessage}`,
-  ]
-    .filter(Boolean)
-    .join(", ");
-}
+import { accessibleName, initials } from "../utils";
 
 interface ConversationRowProps {
   row: RowView;
@@ -86,7 +68,11 @@ export const ConversationRow = memo(function ConversationRow({
               </p>
               <span className="mt-0.5 flex w-8 shrink-0 justify-end">
                 {row.unread > 0 && (
-                  <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-foreground px-1.5 text-[0.7rem] font-semibold text-background tabular-nums">
+                  // dir="ltr": "99+" must not become "+99" under RTL.
+                  <span
+                    dir="ltr"
+                    className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-foreground px-1.5 text-[0.7rem] font-semibold text-background tabular-nums"
+                  >
                     {row.unread > UNREAD_DISPLAY_MAX ? `${UNREAD_DISPLAY_MAX}+` : row.unread}
                   </span>
                 )}

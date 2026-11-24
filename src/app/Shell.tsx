@@ -15,11 +15,8 @@ import { ConversationList } from "@/features/conversations/components/Conversati
 import { ConversationListSkeleton } from "@/features/conversations/components/ConversationListSkeleton";
 import { HandoffAnnouncer } from "@/features/conversations/components/HandoffAnnouncer";
 import { useConversationsSnapshot } from "@/features/conversations/hooks/useConversationsSnapshot";
-
-/** The list sits on the inline-start side: left in LTR, right under dir="rtl" (ADR 0005). */
-function sidebarSide() {
-  return document.documentElement.dir === "rtl" ? "right" : "left";
-}
+import { useDirection } from "@/hooks/use-direction";
+import { DirectionToggle } from "./DirectionToggle";
 
 interface FrameProps {
   /** Sidebar body: the conversations list, or its loading skeleton. */
@@ -33,18 +30,24 @@ interface FrameProps {
 }
 
 function Frame({ list, status, banner, children }: FrameProps) {
+  // The list sits on the inline-start side: left in LTR, right in RTL (ADR 0005).
+  const side = useDirection() === "rtl" ? "right" : "left";
   return (
     <SidebarProvider style={{ "--sidebar-width": "22rem" } as React.CSSProperties}>
-      <Sidebar side={sidebarSide()} variant="inset">
+      <Sidebar side={side} variant="inset">
         <SidebarHeader className="flex-row items-center justify-between border-b px-4 py-3">
           <h1 className="text-base font-semibold">Inbox</h1>
-          {status}
+          <div className="flex items-center gap-3">
+            {status}
+            <DirectionToggle />
+          </div>
         </SidebarHeader>
         <SidebarContent>{list}</SidebarContent>
         {/* At the bottom, so appearing never pushes the rows down. */}
         {banner && <SidebarFooter className="p-0 empty:hidden">{banner}</SidebarFooter>}
       </Sidebar>
-      <SidebarInset>
+      {/* Fixed height, so the thread scrolls inside the pane rather than the page. */}
+      <SidebarInset className="h-svh overflow-hidden md:peer-data-[variant=inset]:h-[calc(100svh-1rem)]">
         <header className="flex items-center gap-2 border-b px-3 py-2 md:hidden">
           <SidebarTrigger />
           <span className="text-sm font-medium">Inbox</span>

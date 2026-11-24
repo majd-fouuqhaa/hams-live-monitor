@@ -1,5 +1,12 @@
 import { produce } from "immer";
-import type { ListState, PersistedReadState, RowView, ServerEvent, Snapshot } from "./types";
+import type {
+  ListState,
+  PersistedReadState,
+  RowView,
+  ServerEvent,
+  Snapshot,
+  ThreadState,
+} from "./types";
 
 /** Recomputes the displayed unread count from the server counter and the read baseline. */
 function syncUnread(state: ListState, id: string) {
@@ -21,6 +28,10 @@ export function loadSnapshot(snapshot: Snapshot, persisted?: PersistedReadState)
     serverUnread: {},
     baselines: serverRestarted ? {} : { ...persisted.baselines },
     openId: null,
+    handoffs: {},
+    createdBy: {},
+    previewEventId: {},
+    stalePreviews: {},
   };
   for (const c of snapshot.conversations) {
     state.byId[c.id] = { ...c, typing: false };
@@ -48,21 +59,26 @@ export function selectRows(state: Pick<ListState, "order" | "byId">): RowView[] 
   return state.order.map((id) => state.byId[id]!);
 }
 
-export function applyEvent(state: ListState, event: ServerEvent, now: Date): ListState {
+/** Looks up a message's text in a loaded thread, for previews the list could not build itself. */
+export type ThreadText = (conversationId: string, messageId: string) => string | undefined;
+
+export function applyEvent(
+  state: ListState,
+  event: ServerEvent,
+  now: Date,
+  threadText: ThreadText = () => undefined,
+): ListState {
   // The server replays from 3 events early on every (re)connect; anything at or below what we have is old.
   if (event.id <= state.lastEventId) return state;
   return produce(state, (draft) => {
     draft.lastEventId = event.id;
-    if (event.type === "token") {
-      draft.drafts[event.messageId] = (draft.drafts[event.messageId] ?? "") + event.text;
-      return;
-    }
     const conversation = draft.byId[event.conversationId];
     if (!conversation) {
       // The mock never creates conversations; a real backend would need a creation event (ADR 0001).
       if (import.meta.env.DEV) console.warn(`Event ${event.id} for unknown conversation`, event);
       return;
     }
+    const id = conversation.id;
     switch (event.type) {
       case "status": {
         if (conversation.status === event.status) break;
@@ -70,31 +86,94 @@ export function applyEvent(state: ListState, event: ServerEvent, now: Date): Lis
         if (event.status === "needs_human") conversation.handedOffAt = now.toISOString();
         else delete conversation.handedOffAt;
         conversation.status = event.status;
+        // The server bumps updatedAt on a status change too (setStatus); receive time stands in for it.
+        conversation.updatedAt = now.toISOString();
         break;
       }
       case "message": {
-        conversation.lastMessage = event.message.text;
+        draft.createdBy[event.message.id] = event.id;
+        setPreview(draft, id, event.message.text, event.id);
         // Mirrors the server, which only counts customer messages.
         if (event.message.role === "customer") {
-          draft.serverUnread[conversation.id] = (draft.serverUnread[conversation.id] ?? 0) + 1;
-          syncUnread(draft, conversation.id);
+          draft.serverUnread[id] = (draft.serverUnread[id] ?? 0) + 1;
+          syncUnread(draft, id);
         }
         // Events carry no timestamp; receive time is close enough (ADR 0006).
         conversation.updatedAt = now.toISOString();
         break;
       }
       case "message_start": {
+        draft.createdBy[event.messageId] = event.id;
         conversation.typing = true;
         draft.drafts[event.messageId] = "";
         break;
       }
+      case "token": {
+        // Only a reply whose start we saw has a draft. One that began before the page loaded still proves
+        // the AI is replying, but its tail alone must never become the preview (ADR 0007).
+        if (event.messageId in draft.drafts) draft.drafts[event.messageId] += event.text;
+        else conversation.typing = true;
+        break;
+      }
       case "message_end": {
         conversation.typing = false;
-        conversation.lastMessage = draft.drafts[event.messageId] ?? conversation.lastMessage;
         conversation.updatedAt = now.toISOString();
+        const text = draft.drafts[event.messageId] ?? threadText(id, event.messageId);
         delete draft.drafts[event.messageId];
+        if (text !== undefined) setPreview(draft, id, text, event.id);
+        else draft.stalePreviews[id] = event.id;
+        break;
+      }
+      case "tool_call": {
+        const reason = event.args.reason;
+        if (event.name !== "transfer_to_human" || typeof reason !== "string") break;
+        (draft.handoffs[id] ??= []).push({
+          eventId: event.id,
+          reason,
+          receivedAt: now.toISOString(),
+        });
         break;
       }
     }
+  });
+}
+
+function setPreview(state: ListState, id: string, text: string, eventId: number) {
+  const row = state.byId[id];
+  if (!row) return;
+  row.lastMessage = text;
+  state.previewEventId[id] = eventId;
+  delete state.stalePreviews[id];
+}
+
+/**
+ * Fills previews the stream could not (a reply whose start we missed) from a fresh GET /conversations.
+ * A row whose preview changed after the snapshot was taken keeps it: the snapshot is older.
+ */
+export function applyPreviewRefresh(state: ListState, snapshot: Snapshot): ListState {
+  return produce(state, (draft) => {
+    for (const id of Object.keys(draft.stalePreviews)) {
+      const fresh = snapshot.conversations.find((c) => c.id === id);
+      if (fresh && snapshot.lastEventId >= (draft.previewEventId[id] ?? 0)) {
+        setPreview(draft, id, fresh.lastMessage, snapshot.lastEventId);
+      }
+      delete draft.stalePreviews[id];
+    }
+  });
+}
+
+/** The refetch failed: the old previews stay until the next message replaces them. */
+export function dropStalePreviews(state: ListState): ListState {
+  return produce(state, (draft) => {
+    draft.stalePreviews = {};
+  });
+}
+
+/** A thread just loaded with a reply still streaming: the row shows "AI is replying" even if the list missed its start. */
+export function syncTypingFromThread(state: ListState, thread: ThreadState): ListState {
+  const streaming = thread.order.some((key) => thread.byId[key]?.streaming);
+  if (!streaming || state.byId[thread.conversationId]?.typing !== false) return state;
+  return produce(state, (draft) => {
+    draft.byId[thread.conversationId]!.typing = true;
   });
 }

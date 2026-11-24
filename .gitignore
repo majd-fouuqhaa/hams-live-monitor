@@ -26,3 +26,5 @@ docs
 
 # Vitest browser-mode failure screenshots
 .vitest
+src/**/tests
+.fallow
