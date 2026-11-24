@@ -17,10 +17,11 @@ export function ConversationPane() {
   const customer = useConversations((s) => s.list?.byId[conversationId]?.customer);
   const status = useConversations((s) => s.list?.byId[conversationId]?.status);
 
+  // Re-runs once the list loads: on a direct link or reload, the pane mounts before the list exists.
   useEffect(() => {
     open(conversationId);
     return () => open(null);
-  }, [open, conversationId]);
+  }, [open, conversationId, loaded]);
 
   if (!loaded) return null;
   if (customer === undefined || !status) return <ConversationNotFound />;

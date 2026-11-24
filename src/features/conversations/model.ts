@@ -121,7 +121,8 @@ export function applyEvent(
         const text = draft.drafts[event.messageId] ?? threadText(id, event.messageId);
         delete draft.drafts[event.messageId];
         if (text !== undefined) setPreview(draft, id, text, event.id);
-        else draft.stalePreviews[id] = event.id;
+        // Only worth a refresh if no newer preview is already showing.
+        else if (event.id > (draft.previewEventId[id] ?? 0)) draft.stalePreviews[id] = event.id;
         break;
       }
       case "tool_call": {
@@ -138,9 +139,10 @@ export function applyEvent(
   });
 }
 
+/** Sets a row's preview, unless a newer one is already showing (a refresh can be ahead of the stream). */
 function setPreview(state: ListState, id: string, text: string, eventId: number) {
   const row = state.byId[id];
-  if (!row) return;
+  if (!row || eventId < (state.previewEventId[id] ?? 0)) return;
   row.lastMessage = text;
   state.previewEventId[id] = eventId;
   delete state.stalePreviews[id];
@@ -148,15 +150,15 @@ function setPreview(state: ListState, id: string, text: string, eventId: number)
 
 /**
  * Fills previews the stream could not (a reply whose start we missed) from a fresh GET /conversations.
- * A row whose preview changed after the snapshot was taken keeps it: the snapshot is older.
+ * A reply that ended after the snapshot was taken keeps waiting for the next refresh; a row whose
+ * preview changed after the snapshot keeps it.
  */
 export function applyPreviewRefresh(state: ListState, snapshot: Snapshot): ListState {
   return produce(state, (draft) => {
-    for (const id of Object.keys(draft.stalePreviews)) {
+    for (const [id, endedAt] of Object.entries(draft.stalePreviews)) {
+      if (snapshot.lastEventId < endedAt) continue;
       const fresh = snapshot.conversations.find((c) => c.id === id);
-      if (fresh && snapshot.lastEventId >= (draft.previewEventId[id] ?? 0)) {
-        setPreview(draft, id, fresh.lastMessage, snapshot.lastEventId);
-      }
+      if (fresh) setPreview(draft, id, fresh.lastMessage, snapshot.lastEventId);
       delete draft.stalePreviews[id];
     }
   });
@@ -169,11 +171,15 @@ export function dropStalePreviews(state: ListState): ListState {
   });
 }
 
-/** A thread just loaded with a reply still streaming: the row shows "AI is replying" even if the list missed its start. */
+/**
+ * A thread just loaded, at the same event as the list: its reply in progress, if any, is the truth for
+ * the row's "AI is replying" (the list may have missed the reply's start).
+ */
 export function syncTypingFromThread(state: ListState, thread: ThreadState): ListState {
-  const streaming = thread.order.some((key) => thread.byId[key]?.streaming);
-  if (!streaming || state.byId[thread.conversationId]?.typing !== false) return state;
+  const streaming = thread.order.some((key) => thread.byId[key]?.streaming === true);
+  const row = state.byId[thread.conversationId];
+  if (!row || row.typing === streaming) return state;
   return produce(state, (draft) => {
-    draft.byId[thread.conversationId]!.typing = true;
+    draft.byId[thread.conversationId]!.typing = streaming;
   });
 }

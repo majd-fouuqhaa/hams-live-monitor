@@ -13,18 +13,20 @@ export function Composer({ conversationId, autoFocus }: ComposerProps) {
   const { setReplyDraft, send } = useConversationsActions();
   const draft = useConversations((s) => s.replyDrafts[conversationId] ?? "");
   const error = useConversations((s) => s.sendErrors[conversationId]);
-  const canSend = draft.trim().length > 0;
+  // A reply needs a loaded thread to show in; typing is fine while it loads.
+  const loaded = useConversations((s) => s.threads[conversationId]?.loaded ?? false);
+  const canSend = loaded && draft.trim().length > 0;
 
   const submit = (e: React.SubmitEvent) => {
     e.preventDefault();
-    send(conversationId);
+    if (canSend) send(conversationId);
   };
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-2">
       {error && (
         <p role="alert" className="text-xs text-destructive">
-          Couldn't send: {error}
+          {error}
         </p>
       )}
       <div className="flex items-end gap-2">
