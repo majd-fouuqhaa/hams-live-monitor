@@ -3,6 +3,8 @@
 // The layout must mirror under <html dir="rtl">, so only logical utilities are allowed:
 //   ms-/me-, ps-/pe-, start-/end-, text-start/text-end, rounded-s/e, border-s/e.
 // Add `rtl-ok` in a comment on the same line for a deliberate exception.
+// Vendored shadcn/ui files (src/components/ui) are skipped: their `data-[side=left]:left-0`-style classes
+// implement the components' explicit `side` prop, and re-running `shadcn add` would overwrite any edits.
 //
 // Usage: node scripts/check-rtl.mjs            -> scans src/
 //        node scripts/check-rtl.mjs a.tsx b.ts -> scans the given files (used by `vp staged`)
@@ -29,7 +31,10 @@ function* walk(dir) {
   }
 }
 
-const files = process.argv.length > 2 ? process.argv.slice(2) : [...walk("src")];
+const VENDORED = /(^|[\\/])src[\\/]components[\\/]ui[\\/]/;
+const files = (process.argv.length > 2 ? process.argv.slice(2) : [...walk("src")]).filter(
+  (file) => !VENDORED.test(file),
+);
 const problems = [];
 
 for (const file of files) {
