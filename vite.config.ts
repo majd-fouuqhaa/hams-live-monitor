@@ -64,6 +64,8 @@ export default defineConfig({
             headless: true,
             provider: playwright(),
             instances: [{ browser: "chromium" }],
+            // Desktop by default: below `md` the conversation list lives in a closed Sheet.
+            viewport: { width: 1280, height: 800 },
           },
         },
       },
